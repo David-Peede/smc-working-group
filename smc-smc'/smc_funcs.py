@@ -67,7 +67,7 @@ def draw_y(rho, Lx, ploidy):
     ploidy -- Haploid or diploid coalescent units.
     """
     # Draw y.
-    y = np.random.exponential(((rho / ploidy) * Lx))
+    y = np.random.exponential((1 / ((rho / ploidy) * Lx)))
     return y
 
 # Define a function to determine the the lineage and age of the recombination event.
@@ -118,7 +118,7 @@ def draw_coal_smc_prime(node_table, c_tree_edge_table, c_tree_dicc, g, Ne, ploid
                 ((c_tree_dicc[key]['upper'] >= c_upper_bound) & (c_tree_dicc[key]['lower'] <= c_lower_bound))
             ] ### YOU CAN ADD THE CONDITION (key != rec_edge_key) FOR SMC ###
             # Determine the time of the coalescent event.
-            coal_time = g + np.random.exponential((len(available_lineages) / (Ne * ploidy)))
+            coal_time = g + np.random.exponential(((Ne * ploidy) / len(available_lineages)))
             # If the the coalescent event occurs within the current time interval.
             if c_upper_bound > coal_time > c_lower_bound:
                 # Determine which edge the coalescent event occurs on.
@@ -133,7 +133,7 @@ def draw_coal_smc_prime(node_table, c_tree_edge_table, c_tree_dicc, g, Ne, ploid
     # If an edge was not found within the current tree's interval.
     if coal_edge_key == None:
         # Determine the new time of coalescences above the root.
-        coal_time = node_table.time[root_node] + np.random.exponential(1 / (Ne * ploidy))
+        coal_time = node_table.time[root_node] + np.random.exponential((Ne * ploidy))
     return coal_edge_key, coal_time, root_node
 
 # Define a function to determine the lineage and age of the next coalescent event for the smc model.
@@ -173,7 +173,7 @@ def draw_coal_smc(node_table, c_tree_edge_table, c_tree_dicc, rec_edge_key, g, N
             # If there are avaiable lineages.
             if len(available_lineages) > 0:
                 # Determine the time of the coalescent event.
-                coal_time = g + np.random.exponential((len(available_lineages) / (Ne * ploidy)))
+                coal_time = g + np.random.exponential(((Ne * ploidy) / len(available_lineages)))
             # Else set the coalescent event to a variable that will fail.
             else:
                 coal_time = -1
@@ -191,7 +191,7 @@ def draw_coal_smc(node_table, c_tree_edge_table, c_tree_dicc, rec_edge_key, g, N
     # If an edge was not found within the current tree's interval.
     if coal_edge_key == None:
         # Determine the new time of coalescences above the root.
-        coal_time = node_table.time[root_node] + np.random.exponential(1 / (Ne * ploidy))
+        coal_time = node_table.time[root_node] + np.random.exponential((Ne * ploidy))
     return coal_edge_key, coal_time, root_node
 
 # Define a function to perform a subtree pruning and regrafting that is compatible with tskit.
