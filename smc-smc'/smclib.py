@@ -1056,7 +1056,7 @@ def R_g_arg(ts):
 
 # Define a function to extract the number of recombination events from a tree-sequence ARG dictionary.
 def R_arg_dicc(ts_dicc):
-    return len(ts_dicc)
+    return len(ts_dicc) - 1
 
 # Define a function to extract the tmrca from the ith tree in a tskit tree-sequence.
 def ith_tmrca_ts(ts, ith_tree):
