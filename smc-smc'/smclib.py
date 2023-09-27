@@ -246,6 +246,9 @@ def draw_y(rho, Lx, ploidy):
     Lx     -- Total branch length of T_{x}.
     ploidy -- Haploid or diploid coalescent units.
     """
+    # Convert the total branch length from generations
+    # to coalescent units.
+    Lx = Lx / ploidy
     # Draw y.
     y = np.random.exponential((1 / ((rho / ploidy) * Lx)))
     return y
