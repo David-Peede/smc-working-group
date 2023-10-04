@@ -1064,21 +1064,29 @@ def ith_tmrca_ts(ts, ith_tree):
     if ts.num_trees > ith_tree:
         # Extract the tmrca.
         ith_tmrca = ts.at_index(ith_tree).time(ts.at_index(ith_tree).root)
+        # Find the width of the tree.
+        ith_width = ts.at_index(ith_tree).interval.right - ts.at_index(ith_tree).interval.left
     # Else, the ith tree doesn't exist.
     else:
         ith_tmrca = np.nan
-    return ith_tmrca
+        ith_width = np.nan
+    return ith_tmrca, ith_width
 
 # Define a function to extract the tmrca from the ith tree in a tree-sequence dictionary.
 def ith_tmrca_ts_dicc(ts_dicc, ith_tree):
     # If the ith tree is the last tree.
     if ith_tree == -1:
         ith_tmrca = ts_dicc[max(ts_dicc)].nodes[ts_dicc[max(ts_dicc)].root].age
+        # Find the width of the tree.
+        ith_width = ts_dicc[max(ts_dicc)].right - ts_dicc[max(ts_dicc)].left
     # Else-if the ith tree exists.
     elif len(ts_dicc) > ith_tree:
         # Extract the tmrca.
         ith_tmrca = ts_dicc[ith_tree].nodes[ts_dicc[ith_tree].root].age
+        # Find the width of the tree.
+        ith_width = ts_dicc[ith_tree].right - ts_dicc[ith_tree].left
     # Else, the ith tree doesn't exist.
     else:
         ith_tmrca = np.nan
-    return ith_tmrca
+        ith_width = np.nan
+    return ith_tmrca, ith_width
