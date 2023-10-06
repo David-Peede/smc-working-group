@@ -3,6 +3,7 @@ import copy
 import msprime
 import numpy as np
 
+
 # Intialize a node class.
 class Node:
     
@@ -91,7 +92,7 @@ class Tree:
         self.edges = {}
         self.upper_bounds = None
         self.recomb_node = None
-        self.coal_node = None
+        self.recoal_node = None
         
     def __deepcopy__(self, memo):
         """
@@ -101,14 +102,11 @@ class Tree:
         if id(self) in memo:
             return memo[id(self)]
         # Create a shallow copy of the tree.
-        copied_tree    = copy.copy(self)
+        copied_tree = copy.copy(self)
         memo[id(self)] = copied_tree
         # Deep copy nodes and edges.
         copied_tree.nodes = copy.deepcopy(self.nodes, memo)
         copied_tree.edges = copy.deepcopy(self.edges, memo)
-        # Deep copy unary nodes.
-        copied_tree.recomb_node = copy.deepcopy(self.recomb_node, memo)
-        copied_tree.coal_node   = copy.deepcopy(self.coal_node, memo)
         return copied_tree
         
     # Define a method to add a node to the tree.
@@ -180,242 +178,47 @@ class Tree:
         root_node = max(self.nodes, key=lambda k: self.nodes[k].age)
         self.root = root_node
         
-    # Define a method to reconcile the recoal and associated nodes.
-    def perform_spr(self, broken_node, inherited_node, lonely_node, below_node, recoal_node, root_node):
+    # Define a method to replace an existing node's child with a new child.
+    def replace_child(self, node_id, old_child, new_child):
         """
-        Perform an SPR operation on the current tree.
+        Replace a node's existing child node.
         """
-        # Intialize the new root.
-        new_root = None
-    
-        ## [1] The broken and below nodes are the root node. ##
-        if root_node.node_id == broken_node.node_id and root_node.node_id == below_node.node_id:
-            
-            # Reconcile the recoal node. #
-            # Point the recoal node to its children: {inherited node, lonely node}.
-            recoal_node.l_child = inherited_node
-            recoal_node.r_child = lonely_node
-            # Point the children: {inherited node, lonely node} to the recoal node.
-            inherited_node.parent = recoal_node
-            lonely_node.parent    = recoal_node
-            # Set recoal node as the new root.
-            new_root = recoal_node
+        # If the left child is the child we are replacing.
+        if self.nodes[node_id].l_child.node_id == old_child.node_id:
+            # Replace the left child with the new child node.
+            self.nodes[node_id].l_child = new_child
+        # If the right child is the child we are replacing.
+        if self.nodes[node_id].r_child.node_id == old_child.node_id:
+            # Replace the right child with the new child node.
+            self.nodes[node_id].r_child = new_child
         
-        
-        ## [2] The broken node is the below node and the root node is unique. ##
-        elif broken_node.node_id == below_node.node_id and broken_node.node_id != root_node.node_id:
-
-            # Reconcile the recoal node's parent node. #
-            # Set the parent of the coal node as the parent of the recoal node.
-            recoal_node.parent = self.coal_node.parent
-            # If the left child of the parent is the broken/below node.
-            if recoal_node.parent.l_child.node_id == below_node.node_id:
-                # Replace the below node with the recoal node in the children set.
-                recoal_node.parent.l_child = recoal_node
-            # Else the right child of the parent is the below node.
-            else:
-                # Replace the below node with the recoal node in the children set.
-                recoal_node.parent.r_child = recoal_node
-            
-            # Reconcile the recoal node. #
-            # Point the recoal node to its children: {inherited node, lonely node}.
-            recoal_node.l_child = inherited_node
-            recoal_node.r_child = lonely_node
-            # Point the children: {inherited node, lonely node} to the recoal node.
-            inherited_node.parent = recoal_node
-            lonely_node.parent    = recoal_node
-        
-        
-        ## [3] The broken node is the root node and the below node is the lonely node. ##
-        elif broken_node.node_id == root_node.node_id and below_node.node_id == lonely_node.node_id:
-
-            # Reconcile the recoal node. #
-            # Point the recoal node to its children: {inherited node, below node}.
-            recoal_node.l_child = inherited_node
-            recoal_node.r_child = below_node
-            # Point the children: {inherited node, below node} to the recoal node.
-            inherited_node.parent = recoal_node
-            below_node.parent     = recoal_node
-            # Set recoal node as the new root.
-            new_root = recoal_node
-        
-        
-        ## [4] The broken node is the root node and the below and lonely nodes are unique. ##
-        elif broken_node.node_id == root_node.node_id and below_node.node_id != lonely_node.node_id:
-
-            # Reconcile the recoal node's parent node. #
-            # Set the parent of the coal node as the parent of the recoal node.
-            recoal_node.parent = self.coal_node.parent
-            # If the left child of the parent is the below node.
-            if recoal_node.parent.l_child.node_id == below_node.node_id:
-                # Replace the below node with the recoal node in the children set.
-                recoal_node.parent.l_child = recoal_node
-            # Else the right child of the parent is the below node.
-            else:
-                # Replace the below node with the recoal node in the children set.
-                recoal_node.parent.r_child = recoal_node
-            
-            # Reconcile the recoal node. #
-            # Point the recoal node to its children: {inherited node, below node}.
-            recoal_node.l_child = inherited_node
-            recoal_node.r_child = below_node
-            # Point the children: {inherited node, below node} to the recoal node.
-            inherited_node.parent = recoal_node
-            below_node.parent     = recoal_node
-            
-            # Reconcile the lonely node. #
-            # Set the lonely node as the new root.
-            lonely_node.parent = None
-            new_root = lonely_node
-        
-        
-        ## [5] The below node is the root node and the broken node is unique. ##
-        elif below_node.node_id == root_node.node_id and broken_node.node_id != root_node.node_id:
-            
-            # Reconcile the lonely node. #
-            # Set the parent of the broken node as the new parent of the lonely node.
-            lonely_node.parent = broken_node.parent
-            # If the left child of the parent is the broken node.
-            if lonely_node.parent.l_child.node_id == broken_node.node_id:
-                # Replace the broken node with the lonely node in the children set.
-                lonely_node.parent.l_child = lonely_node
-            # Else the right child of is the broken node.
-            else:
-                # Replace the broken node with the lonely node in the children set.
-                lonely_node.parent.r_child = lonely_node
-            
-            
-            # Reconcile the recoal node. #
-            # Point the recoal node to its children: {inherited node, below node}.
-            recoal_node.l_child = inherited_node
-            recoal_node.r_child = below_node
-            # Point the children: {inherited node, below node} to the recoal node.
-            inherited_node.parent = recoal_node
-            below_node.parent     = recoal_node
-            # Set recoal node as the new root.
-            new_root = recoal_node
-            
-          
-        ## [6] The broken node, below node, and root node are all unique, and the below node is the lonely node. ##
-        elif broken_node.node_id != root_node.node_id and below_node.node_id == lonely_node.node_id:
-            
-            # Reconcile the recoal node's parent node. #
-            # Set the parent of the broken node as the parent of the recoal node.
-            recoal_node.parent = broken_node.parent
-            # If the left child of the parent is the broken node.
-            if recoal_node.parent.l_child.node_id == broken_node.node_id:
-                # Replace the broken node with the recoal node in the children set.
-                recoal_node.parent.l_child = recoal_node
-            # Else the right child of the parent is the broken node.
-            else:
-                # Replace the broken node with the recoal node in the children set.
-                recoal_node.parent.r_child = recoal_node
-            
-            # Reconcile the recoal node. #
-            # Point the recoal node to its children: {inherited node, below node}.
-            recoal_node.l_child = inherited_node
-            recoal_node.r_child = below_node
-            # Point the children: {inherited node, below node} to the recoal node.
-            inherited_node.parent = recoal_node
-            below_node.parent     = recoal_node
-            
-        ## [7] All nodes are unique. ##
-        else:
-            
-            # Reconcile the lonely node. #
-            # Set the parent of the broken node as the parent of the lonely node.
-            lonely_node.parent = broken_node.parent
-            # If the left child of is the broken node.
-            if lonely_node.parent.l_child.node_id == broken_node.node_id:
-                # Replace the broken node with the lonely node in the children set.
-                lonely_node.parent.l_child = lonely_node
-            # Else the right child of the below node is the broken node.
-            else:
-                # Replace the broken node with the lonely node in the children set.
-                lonely_node.parent.r_child = lonely_node
-                
-            # Reconcile the recoal node's parent node. #
-            # Set the parent of the coal node as the parent of the recoal node.
-            recoal_node.parent = self.coal_node.parent
-            # If the left child of the parent is the below node.
-            if recoal_node.parent.l_child.node_id == below_node.node_id:
-                # Replace the below node with the recoal node in the children set.
-                recoal_node.parent.l_child = recoal_node
-            # Else the right child of the parent is the below node.
-            else:
-                # Replace the below node with the recoal node in the children set.
-                recoal_node.parent.r_child = recoal_node
-            
-            # Reconcile the recoal node. #
-            # Point the recoal node to its children: {inherited node, below node}.
-            recoal_node.l_child = inherited_node
-            recoal_node.r_child = below_node
-            # Point the children: {inherited node, below node} to the recoal node.
-            inherited_node.parent = recoal_node
-            below_node.parent     = recoal_node
-        
-        
-        ## Tie up the new tree ##
-        # Prune the broken node from the tree.
-        self.rmv_node(broken_node)
-        # Graft the recoal node to the tree.
-        self.add_node(recoal_node)
-        # Intialize branch lengths for the new tree.
-        self.init_branch_lengths()
-        # Intialize the edges for the new tree.
-        self.init_edges()
-        # Intialize the next node ids for the new tree.
-        self.init_next_node_id()
-        # If we already know the new root node.
-        if new_root is not None:
-            # Intialize the new root.
-            self.root = new_root.node_id
-        # Else, we do not know the root.
-        else:
-            # Intialize the new root.
-            self.find_root()
-
+    # Define a method to replace an exiting node on the tree with a new node.
+    def replace_node(self, old_node, new_node):
+        """
+        Remove an old node and add a new node.
+        """
+        # Remove the old node from the tree.
+        self.rmv_node(old_node)
+        # Add the new node to the tree.
+        self.add_node(new_node)
     
     # Define a function to set the next node id.
     def init_next_node_id(self):
         """
         Set the next node id.
         """
-        last_coal = self.coal_node
+        last_coal = self.recoal_node
         max_node = max(self.nodes)
         if last_coal is not None:
             self.next_node_id = max([last_coal.node_id, max_node]) + 1
         else:
             self.next_node_id = max_node + 1
-    
-    # Define a method to recursively construct the newick information.
-    def _to_newick_recursive(self, node):
-        """
-        Recursively construct the Newick information for a given node.
-        """
-        # Return the leaf id if the node is a leaf.
-        if node.is_leaf():
-            return f'{node.node_id}'
-        # For internal nodes, get the newick information for each child.
-        l_child_info = self._to_newick_recursive(node.l_child)
-        r_child_info = self._to_newick_recursive(node.r_child)
-        return '({}:{},{}:{})'.format(l_child_info, node.l_child_dist, 
-                                      r_child_info, node.r_child_dist)
-    
-    # Define a method to export a tree in newick format.
-    def to_newick(self):
-        """
-        Convert the tree to its Newick format.
-        """
-        # Start the conversion from the root.
-        nwk = self._to_newick_recursive(self.nodes[self.root])
-        # The Newick format ends with a semicolon.
-        return nwk + ';'
-    
-# Define a function to intialize a tree from a msprime simulaion.
-def init_msp_tree(k, Ne, ploidy, seed=None):
+            
+            
+# Define a function to intialize T_{0}.
+def init_T0(k, Ne, ploidy, seed=None):
     """
-    Returns a Tree object from a msprime simulation.
+    Returns a tree object and the tskit table of the first tree.
     
     k      -- Number of chromosomes to simulate.
     Ne     -- Effective population size.
@@ -430,49 +233,9 @@ def init_msp_tree(k, Ne, ploidy, seed=None):
         random_seed=seed,
         discrete_genome=False,
     )
-    # Intialize the current tree.
-    tree = Tree()
-    # For ever node.
-    for node_id, age in enumerate(ts.tables.nodes.time):
-        # If the node is a leaf.
-        if age == 0:
-            # Intialize the node.
-            node = Node(
-                node_id=node_id, age=age, node_type=0,
-                parent=None, l_child=None, r_child=None,
-            )
-            # Add the node to the tree.
-            tree.add_node(node)
-        # Else, the node is an ancestral node.
-        else:
-            # Intialize the node.
-            node = Node(
-                node_id=node_id, age=age, node_type=1,
-                parent=None, l_child=None, r_child=None,
-            )
-            # Add the node to the tree.
-            tree.add_node(node)
-    # For every parent node.
-    for parent in np.unique(ts.tables.edges.parent):
-        # Find the children of the parent node.
-        left_child, right_child = ts.tables.edges[ts.tables.edges.parent == parent].child
-        # Update the parent node for the two children.
-        tree.nodes[left_child].parent = tree.nodes[parent]
-        tree.nodes[right_child].parent = tree.nodes[parent]
-        # Update the children nodes for the parent.
-        tree.nodes[parent].l_child = tree.nodes[left_child]
-        tree.nodes[parent].r_child = tree.nodes[right_child]
-    # Intialize branch lengths.
-    tree.init_branch_lengths()
-    # Intialize the edges for the current tree.
-    tree.init_edges()
-    # Intialize the root node.
-    tree.find_root()
-    # Intialize the next node id.
-    tree.init_next_node_id()
     # Make a copy of the tree-seq tables for editting.
     ts_tables = ts.dump_tables()
-    return tree, ts, ts_tables
+    return ts_tables
 
 # Define a function to determine the distance to the next recombination event.
 def draw_y(rho, Lx, ploidy):
@@ -620,7 +383,47 @@ def sim_smc(k, Ne, rho, ploidy, seed=None):
     # Intialize the start position.
     x = 0
     # Simulate a tree (T_{0}) under the standard coalescent at point x=0.
-    c_tree, ts, ts_tables = init_msp_tree(k=k, Ne=Ne, ploidy=ploidy, seed=seed)
+    ts_tables = init_T0(k=k, Ne=Ne, ploidy=ploidy, seed=seed)
+    # Intialize the current tree.
+    c_tree = Tree()
+    # For ever node.
+    for node_id, age in enumerate(ts_tables.nodes.time):
+        # If the node is a leaf.
+        if age == 0:
+            # Intialize the node.
+            node = Node(
+                node_id=node_id, age=age, node_type=0,
+                parent=None, l_child=None, r_child=None,
+            )
+            # Add the node to the tree.
+            c_tree.add_node(node)
+        # Else, the node is an ancestral node.
+        else:
+            # Intialize the node.
+            node = Node(
+                node_id=node_id, age=age, node_type=1,
+                parent=None, l_child=None, r_child=None,
+            )
+            # Add the node to the tree.
+            c_tree.add_node(node)
+    # For every parent node.
+    for parent in np.unique(ts_tables.edges.parent):
+        # Find the children of the parent node.
+        left_child, right_child = ts_tables.edges[ts_tables.edges.parent == parent].child
+        # Update the parent node for the two children.
+        c_tree.nodes[left_child].parent = c_tree.nodes[parent]
+        c_tree.nodes[right_child].parent = c_tree.nodes[parent]
+        # Update the children nodes for the parent.
+        c_tree.nodes[parent].l_child = c_tree.nodes[left_child]
+        c_tree.nodes[parent].r_child = c_tree.nodes[right_child]
+    # Intialize branch lengths.
+    c_tree.init_branch_lengths()
+    # Intialize the edges for the current tree.
+    c_tree.init_edges()
+    # Intialize the root node.
+    c_tree.find_root()
+    # Intialize the next node id.
+    c_tree.init_next_node_id()
 
     ## (2) Generate the distance, y=exp[(rho/2)L(x)], to the next recombination event. ##
 
@@ -644,19 +447,15 @@ def sim_smc(k, Ne, rho, ploidy, seed=None):
     ## (5) Prune the old branch above g and graft the new branch to construct the next tree at position x+y. ##
 
         ### HIDDEN RECOMBINATION SCENARIO ###
-        
         # If the coalescent event is hidden (ie recombination and coalesence occur on the same branch).
         if rec_edge_key == coal_edge_key:
-
             # Intialize a recombination event node for the current tree.
-            # Note this is purely for bookkeeping purposes for future conversion to a gARG.
             recomb_node = Node(
                 node_id=c_tree.next_rec_id, age=g, node_type=3,
                 parent=c_tree.nodes[c_tree.edges[rec_edge_key]['parent']],
                 l_child=c_tree.nodes[c_tree.edges[rec_edge_key]['child']], r_child=None,
             )
-            # Intialize the coal node for the current tree.
-            # Note this is purely for bookkeeping purposes for future conversion to a gARG.
+            # Intialize the re-coalesence event node for the current tree.
             coal_node = Node(
                 node_id=c_tree.next_node_id, age=coal_time, node_type=1,
                 parent=c_tree.nodes[c_tree.edges[coal_edge_key]['parent']],
@@ -669,24 +468,19 @@ def sim_smc(k, Ne, rho, ploidy, seed=None):
             # Record the recombination event.
             c_tree.recomb_node = recomb_node
             # Record the re-coalesence event.
-            c_tree.coal_node = coal_node
+            c_tree.recoal_node = coal_node
             # Add the current tree to the tree-sequence dictionary.
             ts_dicc[tree_idx] = c_tree
             # Move the tree index forward.
             tree_idx += 1
             # Intialize the next tree by copying the current tree.
-            n_tree       = copy.deepcopy(c_tree)
-            n_tree.left  = (x + y)
+            n_tree = copy.deepcopy(c_tree)
+            n_tree.left = (x + y)
             n_tree.right = 1.0
-            
         # Else, the coalescent event is not hidden.
         else:
-
-            ### Perform the SPR Algorithim ###
-
-            # Intialize unary nodes—ie the recomb and coal nodes. #
+            ### PERFORM THE SPR ALGORITHIM ###
             # Intialize a recombination event node for the current tree.
-            # Note this is purely for bookkeeping purposes for future conversion to a gARG.
             recomb_node = Node(
                 node_id=c_tree.next_rec_id, age=g, node_type=2,
                 parent=c_tree.nodes[c_tree.edges[rec_edge_key]['parent']],
@@ -696,66 +490,201 @@ def sim_smc(k, Ne, rho, ploidy, seed=None):
             c_tree.next_rec_id -= 1
             # Record the recombination event.
             c_tree.recomb_node = recomb_node
-            # If the re-coalescence event is above the root.
+            ## [0] Intialize nodes of interest. ##
+            # Idenitfy the broken node (ie the parent node directly above g).
+            broken_node = c_tree.nodes[c_tree.edges[rec_edge_key]['parent']].node_id
+            # Identify the node to be inherited (ie the parent node directly below g).
+            inherited_node = c_tree.nodes[c_tree.edges[rec_edge_key]['child']].node_id
+            # Identify the root node.
+            root_node = c_tree.root
+            # Idenitfy the lonely node not inherited (ie the child node of the broken node not inherited).
+            if c_tree.nodes[broken_node].l_child.node_id == inherited_node:
+                lonely_node = c_tree.nodes[broken_node].r_child.node_id
+            else:
+                lonely_node = c_tree.nodes[broken_node].l_child.node_id
+            # Identify the below node (ie the node directly below the re-coalescence event.)
             if coal_edge_key == None:
+                # Intialize the below node as the root node.
+                below_node = root_node
                 # Intialize the next node id.
                 next_id = c_tree.next_node_id
-                # Intialize the coal node for the current tree.
-                # Note this is purely for bookkeeping purposes for future conversion to a gARG.
+                # Intialize the re-coalesence event node for the current tree.
                 coal_node = Node(
                     node_id=next_id, age=coal_time, node_type=1,
-                    parent=None, l_child=c_tree.nodes[c_tree.root], r_child=None,
+                    parent=None, l_child=c_tree.nodes[below_node], r_child=None,
                 )
-                # Record the coal node on the current tree.
-                c_tree.coal_node = coal_node
+                # Record the re-coalesence event.
+                c_tree.recoal_node = coal_node
                 # Add the current tree to the tree-sequence dictionary.
                 ts_dicc[tree_idx] = c_tree
                 # Move the tree index forward.
                 tree_idx += 1
                 # Intialize the next tree by copying the current tree.
-                n_tree       = copy.deepcopy(c_tree)
-                n_tree.left  = (x + y)
+                n_tree = copy.deepcopy(c_tree)
+                n_tree.left = (x + y)
                 n_tree.right = 1.0
-            # Else the re-coalescence event is on an existing edge.
             else:
+                # Intialize the below node
+                below_node = c_tree.nodes[c_tree.edges[coal_edge_key]['child']].node_id
                 # Intialize the next node id.
                 next_id = c_tree.next_node_id
-                # Intialize the coal node for the current tree.
-                # Note this is purely for bookkeeping purposes for future conversion to a gARG.
+                # Intialize the re-coalesence event node for the current tree.
                 coal_node = Node(
                     node_id=next_id, age=coal_time, node_type=1,
                     parent=c_tree.nodes[c_tree.edges[coal_edge_key]['parent']],
-                    l_child=c_tree.nodes[c_tree.edges[coal_edge_key]['child']], r_child=None,
+                    l_child=c_tree.nodes[below_node], r_child=None,
                 )
-                # Record the coal node on the current tree.
-                c_tree.coal_node = coal_node
+                # Record the re-coalesence event.
+                c_tree.recoal_node = coal_node
                 # Add the current tree to the tree-sequence dictionary.
                 ts_dicc[tree_idx] = c_tree
                 # Move the tree index forward.
                 tree_idx += 1
                 # Intialize the next tree by copying the current tree.
-                n_tree       = copy.deepcopy(c_tree)
-                n_tree.left  = (x + y)
+                n_tree = copy.deepcopy(c_tree)
+                n_tree.left = (x + y)
                 n_tree.right = 1.0
-
-            # Intialize nodes of interest. #
-            broken_node    = n_tree.recomb_node.parent
-            inherited_node = n_tree.recomb_node.l_child
-            lonely_node    = broken_node.r_child if broken_node.l_child.node_id == inherited_node.node_id else broken_node.l_child
-            below_node     = n_tree.coal_node.l_child
-            root_node      = n_tree.nodes[n_tree.root]
-            # Intialize the re-coalesence event node to create the next tree.
-            recoal_node = Node(
-                node_id=next_id, age=coal_time, node_type=1,
-                parent=None, l_child=None, r_child=None,
-            )
-            ## Reconcile the new tree! ##
-            n_tree.perform_spr(
-                broken_node=broken_node, inherited_node=inherited_node, lonely_node=lonely_node,
-                below_node=below_node, recoal_node=recoal_node, root_node=root_node,
-            )
-
-
+            ## [1] The broken and below nodes are the root node. ##
+            if (broken_node == root_node) & (below_node == root_node):
+                # [1.1] Intialize the recoal node with the inherited node and lonely node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[lonely_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[lonely_node].parent = recoal_node
+                # [1.2] Replace the broken node with the recoal node on the new tree. #
+                n_tree.replace_node(
+                    old_node=n_tree.nodes[broken_node],
+                    new_node=recoal_node,
+                )
+            ## [2] The broken node is the below node and not the root node. ##
+            elif (broken_node == below_node) & (broken_node != root_node):
+                # [2.1] Intialize the recoal node with the inherited node and lonely node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[lonely_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[lonely_node].parent = recoal_node
+                # [2.2] Set the parent of broken/below node as the parent of the recoal node. #
+                recoal_node.parent = n_tree.nodes[broken_node].parent
+                # [2.3] Replace the broken node with the recoal node on the new tree. #
+                n_tree.replace_node(
+                    old_node=n_tree.nodes[broken_node],
+                    new_node=recoal_node,
+                )
+            ## [3] The broken node is the root node. ##
+            elif (broken_node == root_node) & (below_node != root_node):
+                # [3.1] Intialize the recoal node with the inherited node and below node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[below_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[below_node].parent = recoal_node
+                # [3.2A] The below node is the lonely node. #
+                if below_node == lonely_node:
+                    # [3.2A.1] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+                # [3.2B] The below node is not the lonely node. #
+                else:
+                    # [3.2B.1] Set the lonely node as the new root node. #
+                    n_tree.nodes[lonely_node].parent = None
+                    # [3.2B.2] Set the lonely node as parent of the recoal node. #
+                    recoal_node.parent = n_tree.nodes[lonely_node]
+                    # [3.2B.3] Replace the below node with the recoal node in the parent of the #
+                    # below node's children set. #
+                    n_tree.replace_child(
+                        node_id=c_tree.edges[coal_edge_key]['parent'],
+                        old_child=n_tree.nodes[below_node],
+                        new_child=recoal_node,
+                    )
+                    # [3.2B.4] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+            ## [4] The below node is the root node. ##
+            elif (below_node == root_node) & (broken_node != root_node):
+                # [4.1] Intialize the recoal node with the inherited node and below node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[below_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[below_node].parent = recoal_node
+                # [4.2] Replace the broken node with the recoal node in the parent of the #
+                # broken node's children set. #
+                n_tree.replace_child(
+                    node_id=n_tree.nodes[broken_node].parent.node_id,
+                    old_child=n_tree.nodes[broken_node],
+                    new_child=n_tree.nodes[lonely_node],
+                )
+                # [4.3] Replace the broken node with the recoal node on the new tree. #
+                n_tree.replace_node(
+                    old_node=n_tree.nodes[broken_node],
+                    new_node=recoal_node,
+                )
+            ## [5] The broken node, below node, and root node are all unique. ##
+            else:
+                # [5.1] Intialize the recoal node with the inherited node and below node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[below_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[below_node].parent = recoal_node
+                # [5.2A] The below node is the lonely node. #
+                if below_node == lonely_node:
+                    # [5.2A.1] Set the parent of the broken node as parent of the recoal node. #
+                    recoal_node.parent = n_tree.nodes[broken_node].parent
+                    # [5.2A.2] Replace the broken node with the recoal node in the parent of the #
+                    # broken node's children set. #
+                    n_tree.replace_child(
+                        node_id=n_tree.nodes[broken_node].parent.node_id,
+                        old_child=n_tree.nodes[broken_node],
+                        new_child=n_tree.nodes[lonely_node],
+                    )
+                    # [5.2A.3] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+                # [5.2B] The below node and the lonely node are unique. #
+                else:
+                    # [5.2B.1] Set the parent of the broken node as parent of the lonely node. #
+                    n_tree.nodes[lonely_node].parent = n_tree.nodes[broken_node].parent
+                    # [5.2B.2] Set the parent of the below node as parent of the lonely node. #
+                    recoal_node.parent = n_tree.nodes[c_tree.edges[coal_edge_key]['parent']]
+                    # [5.2B.3] Replace the below node with the recoal node in the parent of the #
+                    # below node's children set. #
+                    n_tree.replace_child(
+                        node_id=c_tree.edges[coal_edge_key]['parent'],
+                        old_child=n_tree.nodes[below_node],
+                        new_child=recoal_node,
+                    )
+                    # [5.2B.4] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+        # Intialize branch lengths for the new tree.
+        n_tree.init_branch_lengths()
+        # Intialize the edges for the new tree.
+        n_tree.init_edges()
+        # Intialize the root node for the new tree
+        n_tree.find_root()
+        # Intialize the next node ids for the new tree.
+        n_tree.init_next_node_id()
         # Set the new tree as the current tree.
         c_tree = n_tree
 
@@ -799,7 +728,47 @@ def sim_smc_prime(k, Ne, rho, ploidy, seed=None):
     # Intialize the start position.
     x = 0
     # Simulate a tree (T_{0}) under the standard coalescent at point x=0.
-    c_tree, ts, ts_tables = init_msp_tree(k=k, Ne=Ne, ploidy=ploidy, seed=seed)
+    ts_tables = init_T0(k=k, Ne=Ne, ploidy=ploidy, seed=seed)
+    # Intialize the current tree.
+    c_tree = Tree()
+    # For ever node.
+    for node_id, age in enumerate(ts_tables.nodes.time):
+        # If the node is a leaf.
+        if age == 0:
+            # Intialize the node.
+            node = Node(
+                node_id=node_id, age=age, node_type=0,
+                parent=None, l_child=None, r_child=None,
+            )
+            # Add the node to the tree.
+            c_tree.add_node(node)
+        # Else, the node is an ancestral node.
+        else:
+            # Intialize the node.
+            node = Node(
+                node_id=node_id, age=age, node_type=1,
+                parent=None, l_child=None, r_child=None,
+            )
+            # Add the node to the tree.
+            c_tree.add_node(node)
+    # For every parent node.
+    for parent in np.unique(ts_tables.edges.parent):
+        # Find the children of the parent node.
+        left_child, right_child = ts_tables.edges[ts_tables.edges.parent == parent].child
+        # Update the parent node for the two children.
+        c_tree.nodes[left_child].parent = c_tree.nodes[parent]
+        c_tree.nodes[right_child].parent = c_tree.nodes[parent]
+        # Update the children nodes for the parent.
+        c_tree.nodes[parent].l_child = c_tree.nodes[left_child]
+        c_tree.nodes[parent].r_child = c_tree.nodes[right_child]
+    # Intialize branch lengths.
+    c_tree.init_branch_lengths()
+    # Intialize the edges for the current tree.
+    c_tree.init_edges()
+    # Intialize the root node.
+    c_tree.find_root()
+    # Intialize the next node id.
+    c_tree.init_next_node_id()
 
     ## (2) Generate the distance, y=exp[(rho/2)L(x)], to the next recombination event. ##
 
@@ -823,19 +792,15 @@ def sim_smc_prime(k, Ne, rho, ploidy, seed=None):
     ## (5) Prune the old branch above g and graft the new branch to construct the next tree at position x+y. ##
 
         ### HIDDEN RECOMBINATION SCENARIO ###
-        
         # If the coalescent event is hidden (ie recombination and coalesence occur on the same branch).
         if rec_edge_key == coal_edge_key:
-
             # Intialize a recombination event node for the current tree.
-            # Note this is purely for bookkeeping purposes for future conversion to a gARG.
             recomb_node = Node(
                 node_id=c_tree.next_rec_id, age=g, node_type=3,
                 parent=c_tree.nodes[c_tree.edges[rec_edge_key]['parent']],
                 l_child=c_tree.nodes[c_tree.edges[rec_edge_key]['child']], r_child=None,
             )
-            # Intialize the coal node for the current tree.
-            # Note this is purely for bookkeeping purposes for future conversion to a gARG.
+            # Intialize the re-coalesence event node for the current tree.
             coal_node = Node(
                 node_id=c_tree.next_node_id, age=coal_time, node_type=1,
                 parent=c_tree.nodes[c_tree.edges[coal_edge_key]['parent']],
@@ -848,24 +813,19 @@ def sim_smc_prime(k, Ne, rho, ploidy, seed=None):
             # Record the recombination event.
             c_tree.recomb_node = recomb_node
             # Record the re-coalesence event.
-            c_tree.coal_node = coal_node
+            c_tree.recoal_node = coal_node
             # Add the current tree to the tree-sequence dictionary.
             ts_dicc[tree_idx] = c_tree
             # Move the tree index forward.
             tree_idx += 1
             # Intialize the next tree by copying the current tree.
-            n_tree       = copy.deepcopy(c_tree)
-            n_tree.left  = (x + y)
+            n_tree = copy.deepcopy(c_tree)
+            n_tree.left = (x + y)
             n_tree.right = 1.0
-            
         # Else, the coalescent event is not hidden.
         else:
-
-            ### Perform the SPR Algorithim ###
-
-            # Intialize unary nodes—ie the recomb and coal nodes. #
+            ### PERFORM THE SPR ALGORITHIM ###
             # Intialize a recombination event node for the current tree.
-            # Note this is purely for bookkeeping purposes for future conversion to a gARG.
             recomb_node = Node(
                 node_id=c_tree.next_rec_id, age=g, node_type=2,
                 parent=c_tree.nodes[c_tree.edges[rec_edge_key]['parent']],
@@ -875,66 +835,201 @@ def sim_smc_prime(k, Ne, rho, ploidy, seed=None):
             c_tree.next_rec_id -= 1
             # Record the recombination event.
             c_tree.recomb_node = recomb_node
-            # If the re-coalescence event is above the root.
+            ## [0] Intialize nodes of interest. ##
+            # Idenitfy the broken node (ie the parent node directly above g).
+            broken_node = c_tree.nodes[c_tree.edges[rec_edge_key]['parent']].node_id
+            # Identify the node to be inherited (ie the parent node directly below g).
+            inherited_node = c_tree.nodes[c_tree.edges[rec_edge_key]['child']].node_id
+            # Identify the root node.
+            root_node = c_tree.root
+            # Idenitfy the lonely node not inherited (ie the child node of the broken node not inherited).
+            if c_tree.nodes[broken_node].l_child.node_id == inherited_node:
+                lonely_node = c_tree.nodes[broken_node].r_child.node_id
+            else:
+                lonely_node = c_tree.nodes[broken_node].l_child.node_id
+            # Identify the below node (ie the node directly below the re-coalescence event.)
             if coal_edge_key == None:
+                # Intialize the below node as the root node.
+                below_node = root_node
                 # Intialize the next node id.
                 next_id = c_tree.next_node_id
-                # Intialize the coal node for the current tree.
-                # Note this is purely for bookkeeping purposes for future conversion to a gARG.
+                # Intialize the re-coalesence event node for the current tree.
                 coal_node = Node(
                     node_id=next_id, age=coal_time, node_type=1,
-                    parent=None, l_child=c_tree.nodes[c_tree.root], r_child=None,
+                    parent=None, l_child=c_tree.nodes[below_node], r_child=None,
                 )
-                # Record the coal node on the current tree.
-                c_tree.coal_node = coal_node
+                # Record the re-coalesence event.
+                c_tree.recoal_node = coal_node
                 # Add the current tree to the tree-sequence dictionary.
                 ts_dicc[tree_idx] = c_tree
                 # Move the tree index forward.
                 tree_idx += 1
                 # Intialize the next tree by copying the current tree.
-                n_tree       = copy.deepcopy(c_tree)
-                n_tree.left  = (x + y)
+                n_tree = copy.deepcopy(c_tree)
+                n_tree.left = (x + y)
                 n_tree.right = 1.0
-            # Else the re-coalescence event is on an existing edge.
             else:
+                # Intialize the below node
+                below_node = c_tree.nodes[c_tree.edges[coal_edge_key]['child']].node_id
                 # Intialize the next node id.
                 next_id = c_tree.next_node_id
-                # Intialize the coal node for the current tree.
-                # Note this is purely for bookkeeping purposes for future conversion to a gARG.
+                # Intialize the re-coalesence event node for the current tree.
                 coal_node = Node(
                     node_id=next_id, age=coal_time, node_type=1,
                     parent=c_tree.nodes[c_tree.edges[coal_edge_key]['parent']],
-                    l_child=c_tree.nodes[c_tree.edges[coal_edge_key]['child']], r_child=None,
+                    l_child=c_tree.nodes[below_node], r_child=None,
                 )
-                # Record the coal node on the current tree.
-                c_tree.coal_node = coal_node
+                # Record the re-coalesence event.
+                c_tree.recoal_node = coal_node
                 # Add the current tree to the tree-sequence dictionary.
                 ts_dicc[tree_idx] = c_tree
                 # Move the tree index forward.
                 tree_idx += 1
                 # Intialize the next tree by copying the current tree.
-                n_tree       = copy.deepcopy(c_tree)
-                n_tree.left  = (x + y)
+                n_tree = copy.deepcopy(c_tree)
+                n_tree.left = (x + y)
                 n_tree.right = 1.0
-
-            # Intialize nodes of interest. #
-            broken_node    = n_tree.recomb_node.parent
-            inherited_node = n_tree.recomb_node.l_child
-            lonely_node    = broken_node.r_child if broken_node.l_child.node_id == inherited_node.node_id else broken_node.l_child
-            below_node     = n_tree.coal_node.l_child
-            root_node      = n_tree.nodes[n_tree.root]
-            # Intialize the re-coalesence event node to create the next tree.
-            recoal_node = Node(
-                node_id=next_id, age=coal_time, node_type=1,
-                parent=None, l_child=None, r_child=None,
-            )
-            ## Reconcile the new tree! ##
-            n_tree.perform_spr(
-                broken_node=broken_node, inherited_node=inherited_node, lonely_node=lonely_node,
-                below_node=below_node, recoal_node=recoal_node, root_node=root_node,
-            )
-
-
+            ## [1] The broken and below nodes are the root node. ##
+            if (broken_node == root_node) & (below_node == root_node):
+                # [1.1] Intialize the recoal node with the inherited node and lonely node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[lonely_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[lonely_node].parent = recoal_node
+                # [1.2] Replace the broken node with the recoal node on the new tree. #
+                n_tree.replace_node(
+                    old_node=n_tree.nodes[broken_node],
+                    new_node=recoal_node,
+                )
+            ## [2] The broken node is the below node and not the root node. ##
+            elif (broken_node == below_node) & (broken_node != root_node):
+                # [2.1] Intialize the recoal node with the inherited node and lonely node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[lonely_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[lonely_node].parent = recoal_node
+                # [2.2] Set the parent of broken/below node as the parent of the recoal node. #
+                recoal_node.parent = n_tree.nodes[broken_node].parent
+                # [2.3] Replace the broken node with the recoal node on the new tree. #
+                n_tree.replace_node(
+                    old_node=n_tree.nodes[broken_node],
+                    new_node=recoal_node,
+                )
+            ## [3] The broken node is the root node. ##
+            elif (broken_node == root_node) & (below_node != root_node):
+                # [3.1] Intialize the recoal node with the inherited node and below node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[below_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[below_node].parent = recoal_node
+                # [3.2A] The below node is the lonely node. #
+                if below_node == lonely_node:
+                    # [3.2A.1] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+                # [3.2B] The below node is not the lonely node. #
+                else:
+                    # [3.2B.1] Set the lonely node as the new root node. #
+                    n_tree.nodes[lonely_node].parent = None
+                    # [3.2B.2] Set the lonely node as parent of the recoal node. #
+                    recoal_node.parent = n_tree.nodes[lonely_node]
+                    # [3.2B.3] Replace the below node with the recoal node in the parent of the #
+                    # below node's children set. #
+                    n_tree.replace_child(
+                        node_id=c_tree.edges[coal_edge_key]['parent'],
+                        old_child=n_tree.nodes[below_node],
+                        new_child=recoal_node,
+                    )
+                    # [3.2B.4] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+            ## [4] The below node is the root node. ##
+            elif (below_node == root_node) & (broken_node != root_node):
+                # [4.1] Intialize the recoal node with the inherited node and below node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[below_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[below_node].parent = recoal_node
+                # [4.2] Replace the broken node with the recoal node in the parent of the #
+                # broken node's children set. #
+                n_tree.replace_child(
+                    node_id=n_tree.nodes[broken_node].parent.node_id,
+                    old_child=n_tree.nodes[broken_node],
+                    new_child=n_tree.nodes[lonely_node],
+                )
+                # [4.3] Replace the broken node with the recoal node on the new tree. #
+                n_tree.replace_node(
+                    old_node=n_tree.nodes[broken_node],
+                    new_node=recoal_node,
+                )
+            ## [5] The broken node, below node, and root node are all unique. ##
+            else:
+                # [5.1] Intialize the recoal node with the inherited node and below node as children. #
+                recoal_node = Node(
+                    node_id=next_id, age=coal_time, node_type=1,
+                    parent=None,
+                    l_child=n_tree.nodes[inherited_node], r_child=n_tree.nodes[below_node],
+                )
+                n_tree.nodes[inherited_node].parent = recoal_node
+                n_tree.nodes[below_node].parent = recoal_node
+                # [5.2A] The below node is the lonely node. #
+                if below_node == lonely_node:
+                    # [5.2A.1] Set the parent of the broken node as parent of the recoal node. #
+                    recoal_node.parent = n_tree.nodes[broken_node].parent
+                    # [5.2A.2] Replace the broken node with the recoal node in the parent of the #
+                    # broken node's children set. #
+                    n_tree.replace_child(
+                        node_id=n_tree.nodes[broken_node].parent.node_id,
+                        old_child=n_tree.nodes[broken_node],
+                        new_child=n_tree.nodes[lonely_node],
+                    )
+                    # [5.2A.3] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+                # [5.2B] The below node and the lonely node are unique. #
+                else:
+                    # [5.2B.1] Set the parent of the broken node as parent of the lonely node. #
+                    n_tree.nodes[lonely_node].parent = n_tree.nodes[broken_node].parent
+                    # [5.2B.2] Set the parent of the below node as parent of the lonely node. #
+                    recoal_node.parent = n_tree.nodes[c_tree.edges[coal_edge_key]['parent']]
+                    # [5.2B.3] Replace the below node with the recoal node in the parent of the #
+                    # below node's children set. #
+                    n_tree.replace_child(
+                        node_id=c_tree.edges[coal_edge_key]['parent'],
+                        old_child=n_tree.nodes[below_node],
+                        new_child=recoal_node,
+                    )
+                    # [5.2B.4] Replace the broken node with the recoal node on the new tree. #
+                    n_tree.replace_node(
+                        old_node=n_tree.nodes[broken_node],
+                        new_node=recoal_node,
+                    )
+        # Intialize branch lengths for the new tree.
+        n_tree.init_branch_lengths()
+        # Intialize the edges for the new tree.
+        n_tree.init_edges()
+        # Intialize the root node for the new tree
+        n_tree.find_root()
+        # Intialize the next node ids for the new tree.
+        n_tree.init_next_node_id()
         # Set the new tree as the current tree.
         c_tree = n_tree
 
