@@ -579,8 +579,13 @@ def draw_coal_smc_prime(tree, g, Ne, ploidy):
                 key for key in tree.edges.keys() if\
                 ((tree.edges[key]['upper'] >= c_upper_bound) & (tree.edges[key]['lower'] <= c_lower_bound))
             ] ### YOU CAN ADD THE CONDITION (key != rec_edge_key) FOR SMC ###
-            # Determine the time of the coalescent event.
-            coal_time = g + np.random.exponential((1 / len(available_lineages)))
+            # If there are avaiable lineages.
+            if len(available_lineages) > 0:
+                # Determine the time of the coalescent event.
+                coal_time = g + np.random.exponential((1 / len(available_lineages)))
+            # Else set the coalescent event to a variable that will fail.
+            else:
+                coal_time = -1
             # If the the coalescent event occurs within the current time interval.
             if c_upper_bound > coal_time > c_lower_bound:
                 # Determine which edge the coalescent event occurs on.
