@@ -412,6 +412,117 @@ class Tree:
         # The Newick format ends with a semicolon.
         return nwk + ';'
     
+    # Define a method to print the tree as a Newick string.
+    def print_newick(self):
+        """
+        Print the tree in Newick format.
+        """
+        print(self.to_newick())
+
+    # Define a method to iterate through nodes in pre-order traversal
+    def preorder_traversal(self, node_id=None):
+        """
+        Traverse the tree in a preorder fashion from a specified node
+        or the root (default).
+        """
+        # If a node id is not specified.
+        if node_id is None:
+            # Start at the root.
+            node_id = self.root
+        # Yield the current node.
+        yield self.nodes[node_id]
+        # Fetch the current node.
+        node = self.nodes[node_id]
+        # First, if the node has a left child.
+        if node.l_child is not None:
+            # Recurse and yield from the left child.
+            yield from self.preorder_traversal(node.l_child.node_id)
+        # NExt, if the node has a right child.
+        if node.r_child is not None:
+            # Recurse and yield from the right child
+            yield from self.preorder_traversal(node.r_child.node_id)
+
+    # Define a method to iterate through nodes in post-order traversal.
+    def postorder_traversal(self, node_id=None):
+        """
+        Traverse the tree in a postorder fashion from a specified node
+        or the root (default).
+        """
+        # If a node id is not specified.
+        if node_id is None:
+            # Start at the root.
+            node_id = self.root
+        # Fetch the current node.
+        node = self.nodes[node_id]
+        # First, if the node has a left child.
+        if node.l_child is not None:
+            # Recurse and yield from the left child.
+            yield from self.postorder_traversal(node.l_child.node_id)
+        # Next, if the node has a right child.
+        if node.r_child is not None:
+            # Recurse and yield from the right child.
+            yield from self.postorder_traversal(node.r_child.node_id)
+        # Finally, yield the current node.
+        yield node
+
+    # Convert a tree to a single tree, tree-sequence.
+    def tree2ts(self):
+        """
+        Convert the tree to a single tree, tree-sequence.
+
+        TO DO:
+            Figure out how to encode the original node ids into the node or edge table
+            as having to query the node table to get the node ids is resulting in
+            inconsistent node ids between the tree and tree-sequence.
+        """
+        # Intialize the a tskit tree-sequence.
+        tables = tskit.TableCollection(sequence_length=1)
+        # Intialize a node map.
+        node_map = {}
+        # Traverse the tree in preorder fashion.
+        # for node in dendropy_tree.preorder_node_iter():
+        for node in self.preorder_traversal():
+            # If the node is a leaf.
+            if node.is_leaf():
+                # Update the node table with the leaf.
+                node_id = tables.nodes.add_row(
+                    flags=tskit.NODE_IS_SAMPLE,
+                    time=node.age,
+                )
+            # Else the node is an internal node.
+            else:
+                # Update the node table with the internal node.
+                node_id = tables.nodes.add_row(time=node.age)
+            # Add the node to the node map.
+            node_map[node] = node_id
+        # Intialize the edges.
+        edges = []
+        # Traverse the tree in preorder fashion.
+        for node in self.preorder_traversal():
+            # If the node is not the root.
+            if node.parent is not None:
+                # Grab the parent and child node ids from the node table
+                parent_id = node_map[node.parent]
+                child_id = node_map[node]
+                # Append the (parent, child) edge to the edge list.
+                edges.append((parent_id, child_id))
+        # Sort the edges by the parent node's time.
+        sorted_edges = sorted(edges, key=lambda x: tables.nodes[x[0]].time)
+        # For every parent and child node.
+        for parent_id, child_id in sorted_edges:
+            # Update the edge table.
+            tables.edges.add_row(left=0, right=1, child=child_id, parent=parent_id)
+        # Return the tree-sequence
+        return tables.tree_sequence()
+
+    # Define a method to print the tree as a text tree.
+    def print_tree(self):
+        """
+        Print the tree in Newick format and as a text tree.
+        """
+        # Print the tree as a text tree.
+        print(self.tree2ts().draw_text())
+    
 # Define a function to intialize a tree from a msprime simulaion.
 def init_msp_tree(k, Ne, ploidy, seed=None):
     """
@@ -517,7 +628,7 @@ def draw_coal_smc(tree, rec_edge_key, g, Ne, ploidy):
     Ne                -- Effective population size.
     ploidy            -- Haploid or diploid coalescent units.
     """
-    # Intialize the lower bound of the first interval.
+    # Intialize the recombination event as the first lower bound.
     c_lower_bound = 0
     # Intialize the key of the edge where the coalescent event will occur.
     coal_edge_key = None
@@ -534,8 +645,16 @@ def draw_coal_smc(tree, rec_edge_key, g, Ne, ploidy):
             ]
             # If there are avaiable lineages.
             if len(available_lineages) > 0:
-                # Determine the time of the coalescent event.
-                coal_time = g + np.random.exponential((1 / len(available_lineages)))
+                # If the recombination event occurs within the current time interval.
+                if g > c_lower_bound:
+                    # Determine the time of the coalescent event.
+                    coal_time = g + np.random.exponential((1 / len(available_lineages)))
+                # Else the recombination event occurs before the current time interval.
+                else:
+                    # Determine the time of the coalescent event.
+                    coal_time = c_lower_bound + np.random.exponential(
+                        (1 / len(available_lineages))
+                    )
             # Else set the coalescent event to a variable that will fail.
             else:
                 coal_time = -1
@@ -566,7 +685,7 @@ def draw_coal_smc_prime(tree, g, Ne, ploidy):
     Ne     -- Effective population size.
     ploidy -- Haploid or diploid coalescent units.
     """
-    # Intialize the lower bound of the first interval.
+    # Intialize the recombination event as the first lower bound.
     c_lower_bound = 0
     # Intialize the key of the edge where the coalescent event will occur.
     coal_edge_key = None
@@ -581,8 +700,16 @@ def draw_coal_smc_prime(tree, g, Ne, ploidy):
             ] ### YOU CAN ADD THE CONDITION (key != rec_edge_key) FOR SMC ###
             # If there are avaiable lineages.
             if len(available_lineages) > 0:
-                # Determine the time of the coalescent event.
-                coal_time = g + np.random.exponential((1 / len(available_lineages)))
+                # If the recombination event occurs within the current time interval.
+                if g > c_lower_bound:
+                    # Determine the time of the coalescent event.
+                    coal_time = g + np.random.exponential((1 / len(available_lineages)))
+                # Else the recombination event occurs before the current time interval.
+                else:
+                    # Determine the time of the coalescent event.
+                    coal_time = c_lower_bound + np.random.exponential(
+                        (1 / len(available_lineages))
+                    )
             # Else set the coalescent event to a variable that will fail.
             else:
                 coal_time = -1
